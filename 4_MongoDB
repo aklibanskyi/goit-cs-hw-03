@@ -1,1 +1,179 @@
+from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure, PyMongoError
 
+# Рядок підключення. 
+# Для локальної БД або Docker: "mongodb://localhost:27017/"
+MONGO_URI = "mongodb://localhost:27017/"
+DB_NAME = "cats_management_db"
+COLLECTION_NAME = "cats"
+
+
+def get_collection():
+    """Створює підключення до MongoDB та повертає колекцію."""
+    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+    # Перевірка з'єднання із сервером
+    client.admin.command("ping")
+    db = client[DB_NAME]
+    return client, db[COLLECTION_NAME]
+
+
+# CREATE (Створення для наповнення даними)
+
+def insert_cat(collection, name: str, age: int, features: list):
+    """Створює новий запис про кота у колекції."""
+    try:
+        cat_data = {
+            "name": name,
+            "age": age,
+            "features": features
+        }
+        result = collection.insert_one(cat_data)
+        print(f"Кота '{name}' успішно додано. ID: {result.inserted_id}")
+    except PyMongoError as err:
+        print(f"Помилка при додаванні кота '{name}': {err}")
+
+
+# READ (Читання)
+
+def read_all_cats(collection):
+    """Виводить усі записи із колекції."""
+    try:
+        cats = list(collection.find())
+        if not cats:
+            print("Колекція порожня.")
+            return
+
+        print(f"\n--- Список усіх котів ({len(cats)}) ---")
+        for cat in cats:
+            print(f"ID: {cat.get('_id')} | Ім'я: {cat.get('name')} | Вік: {cat.get('age')} | Характеристики: {cat.get('features')}")
+    except PyMongoError as err:
+        print(f"Помилка при читанні всіх котів: {err}")
+
+
+def find_cat_by_name(collection, name: str):
+    """Знаходить та виводить інформацію про кота за його ім'ям."""
+    try:
+        cat = collection.find_one({"name": name})
+        if cat:
+            print(f"\nЗнайдено кота: ID: {cat.get('_id')}, Ім'я: {cat.get('name')}, Вік: {cat.get('age')}, Характеристики: {cat.get('features')}")
+        else:
+            print(f"Кота з ім'ям '{name}' не знайдено.")
+    except PyMongoError as err:
+        print(f"Помилка при пошуку кота '{name}': {err}")
+
+
+# UPDATE (Оновлення)
+
+def update_cat_age(collection, name: str, new_age: int):
+    """Оновлює вік кота за його ім'ям."""
+    try:
+        result = collection.update_one(
+            {"name": name},
+            {"$set": {"age": new_age}}
+        )
+        if result.matched_count > 0:
+            print(f"Вік кота '{name}' успішно оновлено на {new_age}.")
+        else:
+            print(f"Кота з ім'ям '{name}' не знайдено для оновлення.")
+    except PyMongoError as err:
+        print(f"Помилка при оновленні віку кота '{name}': {err}")
+
+
+def add_feature_to_cat(collection, name: str, new_feature: str):
+    """Додає нову характеристику до списку features кота за ім'ям."""
+    try:
+        # $addToSet запобігає дублюванню характеристик (або можна використати $push)
+        result = collection.update_one(
+            {"name": name},
+            {"$addToSet": {"features": new_feature}}
+        )
+        if result.matched_count > 0:
+            if result.modified_count > 0:
+                print(f"Характеристику '{new_feature}' додано до кота '{name}'.")
+            else:
+                print(f"Характеристика '{new_feature}' уже присутня у кота '{name}'.")
+        else:
+            print(f"Кота з ім'ям '{name}' не знайдено.")
+    except PyMongoError as err:
+        print(f"Помилка при додаванні характеристики коту '{name}': {err}")
+
+
+# DELETE (Видалення)
+
+def delete_cat_by_name(collection, name: str):
+    """Видаляє запис про кота з колекції за його ім'ям."""
+    try:
+        result = collection.delete_one({"name": name})
+        if result.deleted_count > 0:
+            print(f"Кота '{name}' успішно видалено.")
+        else:
+            print(f"Кота з ім'ям '{name}' для видалення не знайдено.")
+    except PyMongoError as err:
+        print(f"Помилка при видаленні кота '{name}': {err}")
+
+
+def delete_all_cats(collection):
+    """Видаляє всі записи із колекції."""
+    try:
+        result = collection.delete_many({})
+        print(f"Усі записи видалено. Видалено документів: {result.deleted_count}.")
+    except PyMongoError as err:
+        print(f"Помилка при видаленні всіх записів: {err}")
+
+
+# Демонстрація роботи скрипта
+
+def main():
+    client = None
+    try:
+        client, collection = get_collection()
+        print("З'єднання з MongoDB успішно встановлено.\n")
+
+        # 0. Очищення перед демонстрацією та первинне заповнення
+        delete_all_cats(collection)
+
+        insert_cat(collection, "barsik", 3, ["ходить в капці", "дає себе гладити", "рудий"])
+        insert_cat(collection, "murzik", 5, ["любить спати", "чорний"])
+        insert_cat(collection, "tom", 2, ["ловить мишей", "сірий"])
+
+        # 1. Читання всіх котів
+        print("\n--- 1. Читання всіх котів ---")
+        read_all_cats(collection)
+
+        # 2. Пошук кота за ім'ям
+        print("\n--- 2. Пошук кота за ім'ям ---")
+        find_cat_by_name(collection, "barsik")
+        find_cat_by_name(collection, "unknown_cat")
+
+        # 3. Оновлення віку кота
+        print("\n--- 3. Оновлення віку ---")
+        update_cat_age(collection, "barsik", 4)
+        find_cat_by_name(collection, "barsik")
+
+        # 4. Додавання нової характеристики
+        print("\n--- 4. Додавання характеристики ---")
+        add_feature_to_cat(collection, "barsik", "голосно муркоче")
+        find_cat_by_name(collection, "barsik")
+
+        # 5. Видалення одного кота
+        print("\n--- 5. Видалення кота за ім'ям ---")
+        delete_cat_by_name(collection, "murzik")
+        read_all_cats(collection)
+
+        # 6. Видалення всіх котів
+        print("\n--- 6. Видалення всіх документів ---")
+        delete_all_cats(collection)
+        read_all_cats(collection)
+
+    except ConnectionFailure:
+        print("Не вдалося підключитися до сервера MongoDB. Перевірте, чи запущена служба MongoDB.")
+    except Exception as general_err:
+        print(f"Виникла непередбачувана помилка: {general_err}")
+    finally:
+        if client:
+            client.close()
+            print("\nПідключення до бази даних закрито.")
+
+
+if __name__ == "__main__":
+    main()
