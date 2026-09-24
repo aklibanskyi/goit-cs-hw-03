@@ -1,1 +1,52 @@
+import psycopg2
 
+# Параметри підключення до вашої БД PostgreSQL
+DB_CONFIG = {
+    "dbname": "task_manager_db",
+    "user": "postgres",
+    "password": "your_password",
+    "host": "localhost",
+    "port": 5432
+}
+
+DDL_SCRIPT = """
+DROP TABLE IF EXISTS tasks;
+DROP TABLE IF EXISTS status;
+DROP TABLE IF EXISTS users;
+
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    fullname VARCHAR(100) NOT NULL,
+    email VARCHAR(100) NOT NULL UNIQUE
+);
+
+CREATE TABLE status (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE
+);
+
+CREATE TABLE tasks (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(100) NOT NULL,
+    description TEXT,
+    status_id INTEGER NOT NULL REFERENCES status(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE
+);
+"""
+
+def create_tables():
+    conn = None
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        with conn.cursor() as cur:
+            cur.execute(DDL_SCRIPT)
+            conn.commit()
+            print("Таблиці успішно створено!")
+    except Exception as error:
+        print(f"Помилка при створенні таблиць: {error}")
+    finally:
+        if conn:
+            conn.close()
+
+if __name__ == "__main__":
+    create_tables()
